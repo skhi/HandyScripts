@@ -152,14 +152,14 @@ box = []
 image_num = 0
 for  m,p in zip(mask_list,pred_list):
     image_num = image_num + 1
-    fid = open("tmp.txt", 'w')
+    tmp_file = open("tmp.txt", 'w')
     m_img = np.array(Image.open(m), dtype = np.float32)
     p_img = np.array(Image.open(p), dtype = np.float32)
     pdml_cm = pdml.ConfusionMatrix( m_img.ravel(), p_img.ravel() )
-    sys.stdout = fid
+    sys.stdout = tmp_file
     print  >> pdml_cm.print_stats()
 
-    fid.close()
+    tmp_file.close()
 
     data = dict( name=[], data=[] )
     with open("tmp.txt", 'r') as f:
@@ -168,25 +168,25 @@ for  m,p in zip(mask_list,pred_list):
             if "TP:" in line:
                 data["name"].append("True Positive")
                 data["data"].append(float(line.split(' ')[1]))
-            if "TN:" in line:
+            elif "TN:" in line:
                 data["name"].append("True Negative")
                 data["data"].append(float(line.split(' ')[1]))
-            if "FP:" in line:
+            elif "FP:" in line:
                 data["name"].append("False Positive")
                 data["data"].append(float(line.split(' ')[1]))
-            if "FN:" in line:
+            elif "FN:" in line:
                 data["name"].append("False Negative")
                 data["data"].append(float(line.split(' ')[1]))
-            if "ACC:" in line:
+            elif "ACC:" in line:
                 data["name"].append("Accuracy")
                 data["data"].append(round( float(line.split(' ')[1]), dec) )
-            if "F1_score:" in line:
+            elif "F1_score:" in line:
                 data["name"].append("F1 Score")
                 data["data"].append(round( float(line.split(' ')[1]), dec) )
-            if "TPR:" in line:
+            elif "TPR:" in line:
                 data["name"].append("Sensitivity")
                 data["data"].append(round( float(line.split(' ')[1]), dec) )
-            if "TNR:" in line:
+            elif "TNR:" in line:
                 data["name"].append("Specificity")
                 data["data"].append(round( float(line.split(' ')[1]), dec) )
 
