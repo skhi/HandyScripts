@@ -15,7 +15,11 @@ from bokeh.models import ColumnDataSource
 from bokeh.models.widgets import DataTable, DateFormatter, TableColumn
 from bokeh.models.widgets.tables import StringFormatter
 from bokeh.layouts import widgetbox
-from bokeh.io import show
+from bokeh.layouts import row
+from bokeh.models import Label
+from bokeh.io import show, save
+from bokeh.palettes import Viridis3
+import matplotlib.pyplot as plt
 import itertools
 import optparse
 import glob
@@ -54,6 +58,12 @@ parser.add_option('-e', '--ext',
                   default   = ".tif",
                   help      = "Indicate an extention of image files. Default is .tif. For all three image collections (raw, mask, prediction), it should be uniform" )
 
+parser.add_option('-s', '--summary',
+                  dest      = "summary",
+                  type      = "string",
+                  default   = "with",
+                  help      = "Indicate if you want the output to be only suumary ('only' vs 'with'): by default the output comes with summary" )
+
 (args, remaining_args) = parser.parse_args()
 
 
@@ -83,6 +93,28 @@ def read_image(input, img_name):
     name = name + "    " + img_name
     return (view[:,:,:], name, xdim, ydim)
 
+
+def fig(x, y, label, name, x_axis_name, y_axis_name, x_range, y_range, size=7, color=Viridis3[0]):
+    plot = figure(x_range = x_range, y_range = y_range, title=name)
+    plot.circle(x, y, size=size, color=color)
+    plot.xaxis.axis_label = x_axis_name
+    plot.yaxis.axis_label = y_axis_name
+    plot.add_layout(label)
+    return plot
+
+
+def cit(text, x, y,):
+    citation = Label(x=x,
+                     y=y,
+                     x_units='screen',
+                     y_units='screen',
+                     text=str("average: ")+text,
+                     render_mode='css',
+                     border_line_color='white',
+                     border_line_alpha=1.0,
+                     background_fill_color='white',
+                     background_fill_alpha=1.0)
+    return citation
 
 def prepare_image(input):
 
@@ -145,9 +177,13 @@ for i, j, k, n in zip(raw_list,mask_list,pred_list,my_image_name):
 result = [None]*(len(raw_img)+len(mask_img)+len(pred_img)+len(pred_img) )
 
 
-dec = 4
-box = []
-
+dec         = 4
+box         = []
+fig_box     = []
+f1_score    = []
+sensitivity = []
+specificity = []
+accuracy    = []
 # count a number of images in the file in order to reshape the numpy array accordingly
 image_num = 0
 for  m,p in zip(mask_list,pred_list):
@@ -180,15 +216,19 @@ for  m,p in zip(mask_list,pred_list):
             elif "ACC:" in line:
                 data["name"].append("Accuracy")
                 data["data"].append(round( float(line.split(' ')[1]), dec) )
+                accuracy.append(round( float(line.split(' ')[1]), dec) )
             elif "F1_score:" in line:
                 data["name"].append("F1 Score")
                 data["data"].append(round( float(line.split(' ')[1]), dec) )
+                f1_score.append(round( float(line.split(' ')[1]), dec) )
             elif "TPR:" in line:
                 data["name"].append("Sensitivity")
                 data["data"].append(round( float(line.split(' ')[1]), dec) )
+                sensitivity.append(round( float(line.split(' ')[1]), dec) )
             elif "TNR:" in line:
                 data["name"].append("Specificity")
                 data["data"].append(round( float(line.split(' ')[1]), dec) )
+                specificity.append(round( float(line.split(' ')[1]), dec) )
 
 
     source = ColumnDataSource(data)
@@ -201,15 +241,53 @@ for  m,p in zip(mask_list,pred_list):
 
     box.append( widgetbox(data_table))
 
+# define plots for sens, spec, f1_score
+image_list = list(range(image_num))
 
-result[::4]  = raw_img
-result[1::4] = mask_img
-result[2::4] = pred_img
-result[3::4] =  box
+# calculate averages
+
+sum_sens  = sum(sensitivity)
+sum_spec  = sum(specificity)
+sum_f1sc  = sum(f1_score)
+sum_accu  = sum(accuracy)
 
 
-result_np = np.array(result)
-result_np = result_np.reshape(image_num, 4)
+# sensitivity
+sens_cit  = cit(str(round(float(sum_sens/image_num), 2)), 80, 90,)
+sens_plot = fig(image_list, sensitivity, sens_cit, "sensitivity", "images", "value", x_range=[-1, image_num+1], y_range=[0,1.1])
+
+#specificity
+spec_cit  = cit(str(round(float(sum_spec/image_num), 2)), 80, 90,)
+spec_plot = fig(image_list, specificity, spec_cit, "specificity", "images", "value", x_range=[-1, image_num+1], y_range=[0,1.1])
+
+#f1 score
+f1sc_cit  = cit(str(round(float(sum_f1sc/image_num), 2)), 80, 90,)
+f1sc_plot = fig(image_list, f1_score, f1sc_cit,  "f1 score", "images", "value", x_range=[-1, image_num+1], y_range=[0,1.1])
+
+# accuracy
+accu_cit  = cit(str(round(float(sum_accu/image_num), 2)), 80, 90,)
+accu_plot = fig(image_list, accuracy, accu_cit,  "accuracy", "images", "value", x_range=[-1, image_num+1], y_range=[0,1.1])
+
+
+
+
+result_np = []
+if args.summary == "only":
+    result_np = np.array([accu_plot,sens_plot,spec_plot,f1sc_plot]).reshape(1,4)
+
+elif args.summary == "with":
+    result[::4]  = raw_img
+    result[1::4] = mask_img
+    result[2::4] = pred_img
+    result[3::4] =  box
+    
+    result_np = np.array(result)
+    result_np = result_np.reshape(image_num, 4)
+    result_np = np.vstack((result_np, np.array([accu_plot,sens_plot,spec_plot,f1sc_plot]).reshape(1,4)))
+
+else:
+    print "'s' argument is wrong"
+    sys.exit(0)
 
 grid = gridplot(result_np.tolist(),
                 toolbar_location='right',
@@ -217,6 +295,7 @@ grid = gridplot(result_np.tolist(),
 
 
 
+save(grid, filename=None)
 show(grid)
 
 
